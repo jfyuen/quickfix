@@ -16,4 +16,6 @@ const (
 	ResetOnLogon            string = "ResetOnLogon"
 	HeartBtInt              string = "HeartBtInt"
 	FileLogPath             string = "FileLogPath"
+	SocketUseSSL            string = "SocketUseSSL"
+	SSLProtocols            string = "SSLProtocols"
 )
