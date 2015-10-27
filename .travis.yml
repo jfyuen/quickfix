@@ -1,13 +1,16 @@
 language: go
+sudo: false
 
 go:
-  - 1.1
-  - 1.2
+  - 1.5.1
   - tip
+
+matrix:
+  allow_failures:
+    - go: tip
 
 install: 
   - make get
-  - (go version | grep "version go1.1") || go get code.google.com/p/go.tools/cmd/vet
 
 before_script: make generate
 script: make travis_test
