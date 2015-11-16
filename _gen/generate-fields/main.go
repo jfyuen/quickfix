@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/quickfixgo/quickfix/datadictionary"
 	"github.com/quickfixgo/quickfix/_gen"
+	"github.com/quickfixgo/quickfix/datadictionary"
 	"os"
 	"sort"
 )
@@ -13,7 +13,6 @@ var (
 	fieldMap     map[string]int
 	fieldTypeMap map[string]*datadictionary.FieldType
 	sortedTags   []string
-	pkg          = "fix"
 )
 
 func usage() {
@@ -48,14 +47,14 @@ func genEnums() {
 		fileOut += ")\n"
 	}
 
-	gen.WriteFile("fix/enum/enums.go", fileOut)
+	gen.WriteFile("enum/enums.go", fileOut)
 }
 
 func genFields() {
 	fileOut := "package field\n"
 	fileOut += "import(\n"
-	fileOut += "\"github.com/quickfixgo/quickfix/fix\"\n"
-	fileOut += "\"github.com/quickfixgo/quickfix/fix/tag\"\n"
+	fileOut += "\"github.com/quickfixgo/quickfix\"\n"
+	fileOut += "\"github.com/quickfixgo/quickfix/tag\"\n"
 	fileOut += ")\n"
 
 	for _, tag := range sortedTags {
@@ -64,122 +63,105 @@ func genFields() {
 		baseType := ""
 		goType := ""
 		switch field.Type {
-		case "STRING":
-			baseType = "StringValue"
-			goType = "string"
 		case "MULTIPLESTRINGVALUE", "MULTIPLEVALUESTRING":
-			baseType = "MultipleStringValue"
-			goType = "string"
+			fallthrough
 		case "MULTIPLECHARVALUE":
-			baseType = "MultipleCharValue"
-			goType = "string"
+			fallthrough
 		case "CHAR":
-			baseType = "CharValue"
-			goType = "string"
+			fallthrough
 		case "CURRENCY":
-			baseType = "CurrencyValue"
-			goType = "string"
+			fallthrough
 		case "DATA":
-			baseType = "DataValue"
-			goType = "string"
+			fallthrough
 		case "MONTHYEAR":
-			baseType = "MonthYearValue"
-			goType = "string"
+			fallthrough
 		case "LOCALMKTDATE":
-			baseType = "LocalMktDateValue"
-			goType = "string"
+			fallthrough
 		case "EXCHANGE":
-			baseType = "ExchangeValue"
-			goType = "string"
+			fallthrough
 		case "LANGUAGE":
-			baseType = "LanguageValue"
-			goType = "string"
+			fallthrough
 		case "XMLDATA":
-			baseType = "XMLDataValue"
-			goType = "string"
+			fallthrough
 		case "COUNTRY":
-			baseType = "CountryValue"
-			goType = "string"
+			fallthrough
 		case "UTCTIMEONLY":
-			baseType = "UTCTimeOnlyValue"
+			fallthrough
 		case "UTCDATEONLY":
-			baseType = "UTCDateOnlyValue"
+			fallthrough
 		case "TZTIMEONLY":
-			baseType = "TZTimeOnlyValue"
+			fallthrough
 		case "TZTIMESTAMP":
-			baseType = "TZTimestampValue"
+			fallthrough
+		case "STRING":
+			baseType = "FIXString"
+			goType = "string"
+
 		case "BOOLEAN":
-			baseType = "BooleanValue"
+			baseType = "FIXBoolean"
 			goType = "bool"
-		case "INT":
-			baseType = "IntValue"
-			goType = "int"
+
 		case "LENGTH":
-			baseType = "LengthValue"
-			goType = "int"
+			fallthrough
 		case "DAYOFMONTH":
-			baseType = "DayOfMonthValue"
-			goType = "int"
+			fallthrough
 		case "NUMINGROUP":
-			baseType = "NumInGroupValue"
-			goType = "int"
+			fallthrough
 		case "SEQNUM":
-			baseType = "SeqNumValue"
+			fallthrough
+		case "INT":
+			baseType = "FIXInt"
 			goType = "int"
+
 		case "UTCTIMESTAMP":
-			baseType = "UTCTimestampValue"
-		case "FLOAT":
-			baseType = "FloatValue"
-			goType = "float64"
+			baseType = "FIXUTCTimestamp"
+
 		case "QTY":
-			baseType = "QtyValue"
-			goType = "float64"
+			fallthrough
 		case "AMT":
-			baseType = "AmtValue"
-			goType = "float64"
+			fallthrough
 		case "PRICE":
-			baseType = "PriceValue"
-			goType = "float64"
+			fallthrough
 		case "PRICEOFFSET":
-			baseType = "PriceOffsetValue"
-			goType = "float64"
+			fallthrough
 		case "PERCENTAGE":
-			baseType = "PercentageValue"
+			fallthrough
+		case "FLOAT":
+			baseType = "FIXFloat"
 			goType = "float64"
+
 		default:
 			fmt.Printf("Unknown type '%v' for tag '%v'\n", field.Type, tag)
 		}
 
 		fileOut += fmt.Sprintf("//%vField is a %v field\n", field.Name, field.Type)
-		fileOut += fmt.Sprintf("type %vField struct { fix.%v }\n", field.Name, baseType)
+		fileOut += fmt.Sprintf("type %vField struct { quickfix.%v }\n", field.Name, baseType)
 		fileOut += fmt.Sprintf("//Tag returns tag.%v (%v)\n", field.Name, field.Tag)
-		fileOut += fmt.Sprintf("func (f %vField) Tag() fix.Tag {return tag.%v}\n", field.Name, field.Name)
+		fileOut += fmt.Sprintf("func (f %vField) Tag() quickfix.Tag {return tag.%v}\n", field.Name, field.Name)
 
 		switch goType {
-		case "string", "int", "float64", "bool":
+		case "bool", "int", "float64", "string":
 			fileOut += fmt.Sprintf("//New%v returns a new %vField initialized with val\n", field.Name, field.Name)
 			fileOut += fmt.Sprintf("func New%v(val %v) *%vField {\n", field.Name, goType, field.Name)
-			fileOut += fmt.Sprintf("field := &%vField{}\n", field.Name)
-			fileOut += "field.Value = val\n"
-			fileOut += "return field\n"
+			fileOut += fmt.Sprintf("return &%vField{quickfix.%v(val)}\n", field.Name, baseType)
 			fileOut += "}\n"
 		}
 	}
 
-	gen.WriteFile("fix/field/fields.go", fileOut)
+	gen.WriteFile("field/fields.go", fileOut)
 }
 
 func genTags() {
 	fileOut := "package tag\n"
-	fileOut += "import(\"github.com/quickfixgo/quickfix/fix\")\n"
+	fileOut += "import(\"github.com/quickfixgo/quickfix\")\n"
 
 	fileOut += "const (\n"
 	for _, tag := range sortedTags {
-		fileOut += fmt.Sprintf("%v fix.Tag = %v\n", tag, fieldMap[tag])
+		fileOut += fmt.Sprintf("%v quickfix.Tag = %v\n", tag, fieldMap[tag])
 	}
 	fileOut += ")\n"
 
-	gen.WriteFile("fix/tag/tag_numbers.go", fileOut)
+	gen.WriteFile("tag/tag_numbers.go", fileOut)
 }
 
 func main() {

@@ -3,8 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/quickfixgo/quickfix"
-	"github.com/quickfixgo/quickfix/fix"
-	"github.com/quickfixgo/quickfix/fix/field"
+	"github.com/quickfixgo/quickfix/field"
 	fix40nos "github.com/quickfixgo/quickfix/fix40/newordersingle"
 	fix41nos "github.com/quickfixgo/quickfix/fix41/newordersingle"
 	fix42nos "github.com/quickfixgo/quickfix/fix42/newordersingle"
@@ -60,15 +59,15 @@ func (e *EchoApplication) FromApp(msg quickfix.Message, sessionID quickfix.Sessi
 
 func (e *EchoApplication) processMsg(msg quickfix.Message, sessionID quickfix.SessionID) quickfix.MessageRejectError {
 
-	orderID := new(field.ClOrdIDField)
-	if err := msg.Body.Get(orderID); err != nil {
+	var orderID field.ClOrdIDField
+	if err := msg.Body.Get(&orderID); err != nil {
 		return err
 	}
 
 	reply := copyMessageToBuilder(msg)
-	sessionOrderID := sessionID.String() + orderID.Value
-	possResend := new(field.PossResendField)
-	if err := msg.Header.Get(possResend); err == nil && possResend.Value {
+	sessionOrderID := sessionID.String() + orderID.String()
+	var possResend field.PossResendField
+	if err := msg.Header.Get(&possResend); err == nil && possResend.FIXBoolean {
 		if e.OrderIds[sessionOrderID] {
 			return nil
 		}
@@ -91,8 +90,8 @@ func copyMessageToBuilder(msg quickfix.Message) quickfix.Message {
 	reply.Header.Set(msgType)
 
 	for _, tag := range msg.Body.Tags() {
-		field := new(fix.StringValue)
-		if err := msg.Body.GetField(tag, field); err == nil {
+		var field quickfix.FIXString
+		if err := msg.Body.GetField(tag, &field); err == nil {
 			reply.Body.SetField(tag, field)
 		}
 	}

@@ -2,39 +2,37 @@ package quickfix
 
 import (
 	"bytes"
-	"github.com/quickfixgo/quickfix/fix"
-	"github.com/quickfixgo/quickfix/fix/tag"
 	"math"
 	"sort"
 )
 
 //FieldMap is a collection of fix fields that make up a fix message.
 type FieldMap struct {
-	fieldLookup map[fix.Tag]*fieldBytes
-	fieldOrder
+	tagLookup map[Tag][]TagValue
+	tagOrder
 }
 
-// fieldOrder true if tag i should occur before tag j
-type fieldOrder func(i, j fix.Tag) bool
+// tagOrder true if tag i should occur before tag j
+type tagOrder func(i, j Tag) bool
 
-type fieldSort struct {
-	tags    []fix.Tag
-	compare fieldOrder
+type tagSort struct {
+	tags    []Tag
+	compare tagOrder
 }
 
-func (t fieldSort) Len() int           { return len(t.tags) }
-func (t fieldSort) Swap(i, j int)      { t.tags[i], t.tags[j] = t.tags[j], t.tags[i] }
-func (t fieldSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
+func (t tagSort) Len() int           { return len(t.tags) }
+func (t tagSort) Swap(i, j int)      { t.tags[i], t.tags[j] = t.tags[j], t.tags[i] }
+func (t tagSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
 
 //in the message header, the first 3 tags in the message header must be 8,9,35
-func headerFieldOrder(i, j fix.Tag) bool {
-	var ordering = func(t fix.Tag) uint32 {
+func headerFieldOrder(i, j Tag) bool {
+	var ordering = func(t Tag) uint32 {
 		switch t {
-		case tag.BeginString:
+		case tagBeginString:
 			return 1
-		case tag.BodyLength:
+		case tagBodyLength:
 			return 2
-		case tag.MsgType:
+		case tagMsgType:
 			return 3
 		}
 
@@ -55,28 +53,28 @@ func headerFieldOrder(i, j fix.Tag) bool {
 }
 
 // In the body, ascending tags
-func normalFieldOrder(i, j fix.Tag) bool { return i < j }
+func normalFieldOrder(i, j Tag) bool { return i < j }
 
 // In the trailer, CheckSum (tag 10) must be last
-func trailerFieldOrder(i, j fix.Tag) bool {
+func trailerFieldOrder(i, j Tag) bool {
 	switch {
-	case i == tag.CheckSum:
+	case i == tagCheckSum:
 		return false
-	case j == tag.CheckSum:
+	case j == tagCheckSum:
 		return true
 	}
 
 	return i < j
 }
 
-func (m *FieldMap) init(ordering fieldOrder) {
-	m.fieldLookup = make(map[fix.Tag]*fieldBytes)
-	m.fieldOrder = ordering
+func (m *FieldMap) init(ordering tagOrder) {
+	m.tagLookup = make(map[Tag][]TagValue)
+	m.tagOrder = ordering
 }
 
-func (m FieldMap) Tags() []fix.Tag {
-	tags := make([]fix.Tag, 0, len(m.fieldLookup))
-	for t := range m.fieldLookup {
+func (m FieldMap) Tags() []Tag {
+	tags := make([]Tag, 0, len(m.tagLookup))
+	for t := range m.tagLookup {
 		tags = append(tags, t)
 	}
 
@@ -87,40 +85,44 @@ func (m FieldMap) Get(parser Field) MessageRejectError {
 	return m.GetField(parser.Tag(), parser)
 }
 
-func (m FieldMap) Has(tag fix.Tag) bool {
-	_, ok := m.fieldLookup[tag]
+func (m FieldMap) Has(tag Tag) bool {
+	_, ok := m.tagLookup[tag]
 	return ok
 }
 
-func (m FieldMap) GetField(tag fix.Tag, parser FieldValue) MessageRejectError {
-	field, ok := m.fieldLookup[tag]
-
+func (m FieldMap) GetField(tag Tag, parser FieldValueReader) MessageRejectError {
+	tagValues, ok := m.tagLookup[tag]
 	if !ok {
 		return conditionallyRequiredFieldMissing(tag)
 	}
 
-	if err := parser.Read(field.Value); err != nil {
+	if _, err := parser.Read(tagValues); err != nil {
 		return incorrectDataFormatForValue(tag)
 	}
 
 	return nil
 }
 
-func (m FieldMap) SetField(tag fix.Tag, field FieldValue) {
-	m.fieldLookup[tag] = newFieldBytes(tag, field.Write())
+func (m FieldMap) SetField(tag Tag, field FieldValueWriter) {
+	tValues := make([]TagValue, 1)
+	tValues[0].init(tag, field.Write())
+	m.tagLookup[tag] = tValues
 }
 
-func (m FieldMap) Set(field Field) {
-	m.fieldLookup[field.Tag()] = newFieldBytes(field.Tag(), field.Write())
+func (m FieldMap) Set(field FieldWriter) {
+	tValues := make([]TagValue, 1)
+	tValues[0].init(field.Tag(), field.Write())
+
+	m.tagLookup[field.Tag()] = tValues
 }
 
-func (m FieldMap) sortedTags() []fix.Tag {
-	sortedTags := make([]fix.Tag, len(m.fieldLookup))
-	for tag := range m.fieldLookup {
+func (m FieldMap) sortedTags() []Tag {
+	sortedTags := make([]Tag, len(m.tagLookup))
+	for tag := range m.tagLookup {
 		sortedTags = append(sortedTags, tag)
 	}
 
-	sort.Sort(fieldSort{sortedTags, m.fieldOrder})
+	sort.Sort(tagSort{sortedTags, m.tagOrder})
 	return sortedTags
 }
 
@@ -128,19 +130,20 @@ func (m FieldMap) write(buffer *bytes.Buffer) {
 	tags := m.sortedTags()
 
 	for _, tag := range tags {
-		if field, ok := m.fieldLookup[tag]; ok {
-			buffer.Write(field.Data)
+		if fields, ok := m.tagLookup[tag]; ok {
+			buffer.Write(fields[0].bytes)
 		}
 	}
 }
 
 func (m FieldMap) total() int {
 	total := 0
-	for t, field := range m.fieldLookup {
-		switch t {
-		case tag.CheckSum: //tag does not contribute to total
+	for _, fields := range m.tagLookup {
+		field := fields[0]
+		switch field.Tag {
+		case tagCheckSum: //tag does not contribute to total
 		default:
-			total += field.Total()
+			total += field.total()
 		}
 	}
 
@@ -149,11 +152,12 @@ func (m FieldMap) total() int {
 
 func (m FieldMap) length() int {
 	length := 0
-	for t := range m.fieldLookup {
-		switch t {
-		case tag.BeginString, tag.BodyLength, tag.CheckSum: //tags do not contribute to length
+	for _, fields := range m.tagLookup {
+		field := fields[0]
+		switch field.Tag {
+		case tagBeginString, tagBodyLength, tagCheckSum: //tags do not contribute to length
 		default:
-			length += m.fieldLookup[t].Length()
+			length += field.length()
 		}
 	}
 

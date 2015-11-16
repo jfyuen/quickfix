@@ -1,9 +1,7 @@
 package quickfix
 
 import (
-	"github.com/quickfixgo/quickfix/fix"
-	"github.com/quickfixgo/quickfix/fix/field"
-	"github.com/quickfixgo/quickfix/fix/tag"
+	"github.com/quickfixgo/quickfix/enum"
 	"time"
 )
 
@@ -11,9 +9,9 @@ type inSession struct {
 }
 
 func (state inSession) FixMsgIn(session *Session, msg Message) (nextState sessionState) {
-	msgType := field.MsgTypeField{}
-	if err := msg.Header.Get(&msgType); err == nil {
-		switch msgType.Value {
+	var msgType FIXString
+	if err := msg.Header.GetField(tagMsgType, &msgType); err == nil {
+		switch string(msgType) {
 		//logon
 		case "A":
 			return state.handleLogon(session, msg)
@@ -45,12 +43,12 @@ func (state inSession) Timeout(session *Session, event event) (nextState session
 	switch event {
 	case needHeartbeat:
 		heartBt := NewMessage()
-		heartBt.Header.Set(field.NewMsgType("0"))
+		heartBt.Header.SetField(tagMsgType, FIXString("0"))
 		session.send(heartBt)
 	case peerTimeout:
 		testReq := NewMessage()
-		testReq.Header.Set(field.NewMsgType("1"))
-		testReq.Body.Set(field.NewTestReqID("TEST"))
+		testReq.Header.SetField(tagMsgType, FIXString("1"))
+		testReq.Body.SetField(tagTestReqID, FIXString("TEST"))
 		session.send(testReq)
 		session.peerTimer.Reset(time.Duration(int64(1.2 * float64(session.heartBeatTimeout))))
 		return pendingTimeout{}
@@ -75,22 +73,22 @@ func (state inSession) handleLogout(session *Session, msg Message) (nextState se
 }
 
 func (state inSession) handleSequenceReset(session *Session, msg Message) (nextState sessionState) {
-	gapFillFlag := new(fix.BooleanField)
-	msg.Body.GetField(tag.GapFillFlag, gapFillFlag)
+	var gapFillFlag FIXBoolean
+	msg.Body.GetField(tagGapFillFlag, &gapFillFlag)
 
-	if err := session.verifySelect(msg, gapFillFlag.Value, gapFillFlag.Value); err != nil {
+	if err := session.verifySelect(msg, bool(gapFillFlag), bool(gapFillFlag)); err != nil {
 		return state.processReject(session, msg, err)
 	}
 
-	newSeqNo := new(fix.IntField)
-	if err := msg.Body.GetField(tag.NewSeqNo, newSeqNo); err == nil {
-		expectedSeqNum := session.store.NextTargetMsgSeqNum()
-		session.log.OnEventf("Received SequenceReset FROM: %v TO: %v", expectedSeqNum, newSeqNo.Value)
+	var newSeqNo FIXInt
+	if err := msg.Body.GetField(tagNewSeqNo, &newSeqNo); err == nil {
+		expectedSeqNum := FIXInt(session.store.NextTargetMsgSeqNum())
+		session.log.OnEventf("Received SequenceReset FROM: %v TO: %v", expectedSeqNum, newSeqNo)
 
 		switch {
-		case newSeqNo.Value > expectedSeqNum:
-			session.store.SetNextTargetMsgSeqNum(newSeqNo.Value)
-		case newSeqNo.Value < expectedSeqNum:
+		case newSeqNo > expectedSeqNum:
+			session.store.SetNextTargetMsgSeqNum(int(newSeqNo))
+		case newSeqNo < expectedSeqNum:
 			//FIXME: to be compliant with legacy tests, do not include tag in reftagid? (11c_NewSeqNoLess)
 			session.doReject(msg, valueIsIncorrectNoTag())
 		}
@@ -105,30 +103,30 @@ func (state inSession) handleResendRequest(session *Session, msg Message) (nextS
 	}
 
 	var err error
-	beginSeqNoField := new(fix.IntValue)
-	if err = msg.Body.GetField(tag.BeginSeqNo, beginSeqNoField); err != nil {
-		return state.processReject(session, msg, requiredTagMissing(tag.BeginSeqNo))
+	var beginSeqNoField FIXInt
+	if err = msg.Body.GetField(tagBeginSeqNo, &beginSeqNoField); err != nil {
+		return state.processReject(session, msg, requiredTagMissing(tagBeginSeqNo))
 	}
 
-	beginSeqNo := beginSeqNoField.Value
+	beginSeqNo := beginSeqNoField
 
-	endSeqNoField := new(fix.IntField)
-	if err = msg.Body.GetField(tag.EndSeqNo, endSeqNoField); err != nil {
-		return state.processReject(session, msg, requiredTagMissing(tag.EndSeqNo))
+	var endSeqNoField FIXInt
+	if err = msg.Body.GetField(tagEndSeqNo, &endSeqNoField); err != nil {
+		return state.processReject(session, msg, requiredTagMissing(tagEndSeqNo))
 	}
 
-	endSeqNo := endSeqNoField.Value
+	endSeqNo := int(endSeqNoField)
 
 	session.log.OnEventf("Received ResendRequest FROM: %d TO: %d", beginSeqNo, endSeqNo)
 	expectedSeqNum := session.store.NextTargetMsgSeqNum()
 
-	if (session.sessionID.BeginString >= fix.BeginString_FIX42 && endSeqNo == 0) ||
-		(session.sessionID.BeginString <= fix.BeginString_FIX42 && endSeqNo == 999999) ||
+	if (session.sessionID.BeginString >= enum.BeginStringFIX42 && endSeqNo == 0) ||
+		(session.sessionID.BeginString <= enum.BeginStringFIX42 && endSeqNo == 999999) ||
 		(endSeqNo >= expectedSeqNum) {
 		endSeqNo = expectedSeqNum - 1
 	}
 
-	state.resendMessages(session, beginSeqNo, endSeqNo)
+	state.resendMessages(session, int(beginSeqNo), endSeqNo)
 	session.store.IncrNextTargetMsgSeqNum()
 	return state
 }
@@ -153,22 +151,22 @@ func (state inSession) resendMessages(session *Session, beginSeqNo, endSeqNo int
 
 		msg, _ := parseMessage(msgBytes)
 
-		msgType := new(fix.StringValue)
-		msg.Header.GetField(tag.MsgType, msgType)
+		var msgType FIXString
+		msg.Header.GetField(tagMsgType, &msgType)
 
-		sentMessageSeqNum := new(fix.IntValue)
-		msg.Header.GetField(tag.MsgSeqNum, sentMessageSeqNum)
+		var sentMessageSeqNum FIXInt
+		msg.Header.GetField(tagMsgSeqNum, &sentMessageSeqNum)
 
-		if fix.IsAdminMessageType(msgType.Value) {
-			nextSeqNum = sentMessageSeqNum.Value + 1
+		if isAdminMessageType(string(msgType)) {
+			nextSeqNum = int(sentMessageSeqNum) + 1
 		} else {
 
-			if seqNum != sentMessageSeqNum.Value {
-				state.generateSequenceReset(session, seqNum, sentMessageSeqNum.Value)
+			if seqNum != int(sentMessageSeqNum) {
+				state.generateSequenceReset(session, seqNum, int(sentMessageSeqNum))
 			}
 
 			session.resend(msg)
-			seqNum = sentMessageSeqNum.Value + 1
+			seqNum = int(sentMessageSeqNum) + 1
 			nextSeqNum = seqNum
 		}
 	}
@@ -179,13 +177,13 @@ func (state inSession) handleTestRequest(session *Session, msg Message) (nextSta
 		return state.processReject(session, msg, err)
 	}
 
-	var testReq field.TestReqIDField
-	if err := msg.Body.Get(&testReq); err != nil {
+	var testReq FIXString
+	if err := msg.Body.GetField(tagTestReqID, &testReq); err != nil {
 		session.log.OnEvent("Test Request with no testRequestID")
 	} else {
 		heartBt := NewMessage()
-		heartBt.Header.Set(field.NewMsgType("0"))
-		heartBt.Body.Set(field.NewTestReqID(testReq.Value))
+		heartBt.Header.SetField(tagMsgType, FIXString("0"))
+		heartBt.Body.SetField(tagTestReqID, testReq)
 		session.send(heartBt)
 	}
 
@@ -225,17 +223,17 @@ func (state inSession) processReject(session *Session, msg Message, rej MessageR
 }
 
 func (state inSession) doTargetTooLow(session *Session, msg Message, rej targetTooLow) (nextState sessionState) {
-	posDupFlag := new(fix.BooleanValue)
-	if err := msg.Header.GetField(tag.PossDupFlag, posDupFlag); err == nil && posDupFlag.Value {
+	var posDupFlag FIXBoolean
+	if err := msg.Header.GetField(tagPossDupFlag, &posDupFlag); err == nil && posDupFlag {
 
-		origSendingTime := new(fix.UTCTimestampValue)
-		if err = msg.Header.GetField(tag.OrigSendingTime, origSendingTime); err != nil {
-			session.doReject(msg, requiredTagMissing(tag.OrigSendingTime))
+		origSendingTime := new(FIXUTCTimestamp)
+		if err = msg.Header.GetField(tagOrigSendingTime, origSendingTime); err != nil {
+			session.doReject(msg, requiredTagMissing(tagOrigSendingTime))
 			return state
 		}
 
-		sendingTime := new(fix.UTCTimestampValue)
-		msg.Header.GetField(tag.SendingTime, sendingTime)
+		sendingTime := new(FIXUTCTimestamp)
+		msg.Header.GetField(tagSendingTime, sendingTime)
 
 		if sendingTime.Value.Before(origSendingTime.Value) {
 			session.doReject(msg, sendingTimeAccuracyProblem())
@@ -264,15 +262,15 @@ func (state *inSession) generateSequenceReset(session *Session, beginSeqNo int, 
 	sequenceReset := NewMessage()
 	session.fillDefaultHeader(sequenceReset)
 
-	sequenceReset.Header.Set(field.NewMsgType("4"))
-	sequenceReset.Header.Set(field.NewMsgSeqNum(beginSeqNo))
-	sequenceReset.Header.Set(field.NewPossDupFlag(true))
-	sequenceReset.Body.Set(field.NewNewSeqNo(endSeqNo))
-	sequenceReset.Body.Set(field.NewGapFillFlag(true))
+	sequenceReset.Header.SetField(tagMsgType, FIXString("4"))
+	sequenceReset.Header.SetField(tagMsgSeqNum, FIXInt(beginSeqNo))
+	sequenceReset.Header.SetField(tagPossDupFlag, FIXBoolean(true))
+	sequenceReset.Body.SetField(tagNewSeqNo, FIXInt(endSeqNo))
+	sequenceReset.Body.SetField(tagGapFillFlag, FIXBoolean(true))
 
-	origSendingTime := new(fix.StringValue)
-	if err := sequenceReset.Header.GetField(tag.SendingTime, origSendingTime); err == nil {
-		sequenceReset.Header.Set(fix.NewStringField(tag.OrigSendingTime, origSendingTime.Value))
+	var origSendingTime FIXString
+	if err := sequenceReset.Header.GetField(tagSendingTime, &origSendingTime); err == nil {
+		sequenceReset.Header.SetField(tagOrigSendingTime, origSendingTime)
 	}
 
 	//FIXME error check?
@@ -286,13 +284,13 @@ func (state *inSession) generateLogout(session *Session) {
 
 func (state *inSession) generateLogoutWithReason(session *Session, reason string) {
 	reply := NewMessage()
-	reply.Header.Set(field.NewMsgType("5"))
-	reply.Header.Set(field.NewBeginString(session.sessionID.BeginString))
-	reply.Header.Set(field.NewTargetCompID(session.sessionID.TargetCompID))
-	reply.Header.Set(field.NewSenderCompID(session.sessionID.SenderCompID))
+	reply.Header.SetField(tagMsgType, FIXString("5"))
+	reply.Header.SetField(tagBeginString, FIXString(session.sessionID.BeginString))
+	reply.Header.SetField(tagTargetCompID, FIXString(session.sessionID.TargetCompID))
+	reply.Header.SetField(tagSenderCompID, FIXString(session.sessionID.SenderCompID))
 
 	if reason != "" {
-		reply.Body.Set(field.NewText(reason))
+		reply.Body.SetField(tagText, FIXString(reason))
 	}
 
 	session.send(reply)

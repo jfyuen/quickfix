@@ -2,8 +2,6 @@ package quickfix
 
 import (
 	"github.com/quickfixgo/quickfix/datadictionary"
-	"github.com/quickfixgo/quickfix/fix"
-	"github.com/quickfixgo/quickfix/fix/tag"
 	. "gopkg.in/check.v1"
 	"time"
 )
@@ -14,45 +12,45 @@ type ValidationTests struct{}
 
 func (s *ValidationTests) createFIX40NewOrderSingle() Message {
 	msg := NewMessage()
-	msg.Header.Set(fix.NewStringField(tag.MsgType, "D"))
-	msg.Header.Set(fix.NewStringField(tag.BeginString, "FIX.4.0"))
-	msg.Header.Set(fix.NewStringField(tag.BodyLength, "0"))
-	msg.Header.Set(fix.NewStringField(tag.SenderCompID, "0"))
-	msg.Header.Set(fix.NewStringField(tag.TargetCompID, "0"))
-	msg.Header.Set(fix.NewStringField(tag.MsgSeqNum, "0"))
-	msg.Header.Set(fix.NewUTCTimestampField(tag.SendingTime, time.Now()))
+	msg.Header.SetField(tagMsgType, FIXString("D"))
+	msg.Header.SetField(tagBeginString, FIXString("FIX.4.0"))
+	msg.Header.SetField(tagBodyLength, FIXString("0"))
+	msg.Header.SetField(tagSenderCompID, FIXString("0"))
+	msg.Header.SetField(tagTargetCompID, FIXString("0"))
+	msg.Header.SetField(tagMsgSeqNum, FIXString("0"))
+	msg.Header.SetField(tagSendingTime, FIXUTCTimestamp{Value: time.Now()})
 
-	msg.Body.Set(fix.NewStringField(tag.ClOrdID, "A"))
-	msg.Body.Set(fix.NewStringField(tag.HandlInst, "1"))
-	msg.Body.Set(fix.NewStringField(tag.Symbol, "A"))
-	msg.Body.Set(fix.NewStringField(tag.Side, "1"))
-	msg.Body.Set(fix.NewStringField(tag.OrdType, "1"))
-	msg.Body.Set(fix.NewIntField(tag.OrderQty, 5))
+	msg.Body.SetField(Tag(11), FIXString("A"))
+	msg.Body.SetField(Tag(21), FIXString("1"))
+	msg.Body.SetField(Tag(55), FIXString("A"))
+	msg.Body.SetField(Tag(54), FIXString("1"))
+	msg.Body.SetField(Tag(40), FIXString("1"))
+	msg.Body.SetField(Tag(38), FIXInt(5))
 
-	msg.Trailer.Set(fix.NewStringField(tag.CheckSum, "000"))
+	msg.Trailer.SetField(tagCheckSum, FIXString("000"))
 
 	return msg
 }
 
 func (s *ValidationTests) createFIX43NewOrderSingle() Message {
 	msg := NewMessage()
-	msg.Header.Set(fix.NewStringField(tag.MsgType, "D"))
-	msg.Header.Set(fix.NewStringField(tag.BeginString, "FIX.4.3"))
-	msg.Header.Set(fix.NewStringField(tag.BodyLength, "0"))
-	msg.Header.Set(fix.NewStringField(tag.SenderCompID, "0"))
-	msg.Header.Set(fix.NewStringField(tag.TargetCompID, "0"))
-	msg.Header.Set(fix.NewStringField(tag.MsgSeqNum, "0"))
-	msg.Header.Set(fix.NewUTCTimestampField(tag.SendingTime, time.Now()))
+	msg.Header.SetField(tagMsgType, FIXString("D"))
+	msg.Header.SetField(tagBeginString, FIXString("FIX.4.3"))
+	msg.Header.SetField(tagBodyLength, FIXString("0"))
+	msg.Header.SetField(tagSenderCompID, FIXString("0"))
+	msg.Header.SetField(tagTargetCompID, FIXString("0"))
+	msg.Header.SetField(tagMsgSeqNum, FIXString("0"))
+	msg.Header.SetField(tagSendingTime, FIXUTCTimestamp{Value: time.Now()})
 
-	msg.Body.Set(fix.NewStringField(tag.ClOrdID, "A"))
-	msg.Body.Set(fix.NewStringField(tag.HandlInst, "1"))
-	msg.Body.Set(fix.NewStringField(tag.Symbol, "A"))
-	msg.Body.Set(fix.NewStringField(tag.Side, "1"))
-	msg.Body.Set(fix.NewIntField(tag.OrderQty, 5))
-	msg.Body.Set(fix.NewStringField(tag.OrdType, "1"))
-	msg.Body.Set(fix.NewUTCTimestampField(tag.TransactTime, time.Now()))
+	msg.Body.SetField(Tag(11), FIXString("A"))
+	msg.Body.SetField(Tag(21), FIXString("1"))
+	msg.Body.SetField(Tag(55), FIXString("A"))
+	msg.Body.SetField(Tag(54), FIXString("1"))
+	msg.Body.SetField(Tag(38), FIXInt(5))
+	msg.Body.SetField(Tag(40), FIXString("1"))
+	msg.Body.SetField(Tag(60), FIXUTCTimestamp{Value: time.Now()})
 
-	msg.Trailer.Set(fix.NewStringField(tag.CheckSum, "000"))
+	msg.Trailer.SetField(tagCheckSum, FIXString("000"))
 
 	return msg
 }
@@ -61,47 +59,47 @@ func (s *ValidationTests) TestValidateInvalidTagNumber(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 
 	builder := s.createFIX40NewOrderSingle()
-	builder.Header.Set(fix.NewStringField(9999, "hello"))
+	builder.Header.SetField(9999, FIXString("hello"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonInvalidTagNumber)
-	c.Check(*reject.RefTagID(), Equals, fix.Tag(9999))
+	c.Check(*reject.RefTagID(), Equals, Tag(9999))
 
 	builder = s.createFIX40NewOrderSingle()
-	builder.Trailer.Set(fix.NewStringField(9999, "hello"))
+	builder.Trailer.SetField(9999, FIXString("hello"))
 	msgBytes, _ = builder.Build()
 	msg, _ = parseMessage(msgBytes)
 
 	reject = validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonInvalidTagNumber)
-	c.Check(*reject.RefTagID(), Equals, fix.Tag(9999))
+	c.Check(*reject.RefTagID(), Equals, Tag(9999))
 
 	builder = s.createFIX40NewOrderSingle()
-	builder.Body.Set(fix.NewStringField(9999, "hello"))
+	builder.Body.SetField(9999, FIXString("hello"))
 	msgBytes, _ = builder.Build()
 	msg, _ = parseMessage(msgBytes)
 
 	reject = validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonInvalidTagNumber)
-	c.Check(*reject.RefTagID(), Equals, fix.Tag(9999))
+	c.Check(*reject.RefTagID(), Equals, Tag(9999))
 }
 
 func (s *ValidationTests) TestValidateTagNotDefinedForMessage(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 
 	builder := s.createFIX40NewOrderSingle()
-	builder.Body.Set(fix.NewStringField(41, "hello"))
+	builder.Body.SetField(41, FIXString("hello"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonTagNotDefinedForThisMessageType)
-	c.Check(*reject.RefTagID(), Equals, fix.Tag(41))
+	c.Check(*reject.RefTagID(), Equals, Tag(41))
 }
 
 func (s *ValidationTests) TestValidateTagNotDefinedForMessageComponent(c *C) {
@@ -119,47 +117,47 @@ func (s *ValidationTests) TestValidateFieldNotFound(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 
 	builder := NewMessage()
-	builder.Header.Set(fix.NewStringField(tag.MsgType, "D"))
-	builder.Header.Set(fix.NewStringField(tag.BeginString, "FIX.4.0"))
-	builder.Header.Set(fix.NewStringField(tag.BodyLength, "0"))
-	builder.Header.Set(fix.NewStringField(tag.SenderCompID, "0"))
-	builder.Header.Set(fix.NewStringField(tag.TargetCompID, "0"))
-	builder.Header.Set(fix.NewStringField(tag.MsgSeqNum, "0"))
-	builder.Header.Set(fix.NewUTCTimestampField(tag.SendingTime, time.Now()))
-	builder.Trailer.Set(fix.NewStringField(tag.CheckSum, "000"))
+	builder.Header.SetField(tagMsgType, FIXString("D"))
+	builder.Header.SetField(tagBeginString, FIXString("FIX.4.0"))
+	builder.Header.SetField(tagBodyLength, FIXString("0"))
+	builder.Header.SetField(tagSenderCompID, FIXString("0"))
+	builder.Header.SetField(tagTargetCompID, FIXString("0"))
+	builder.Header.SetField(tagMsgSeqNum, FIXString("0"))
+	builder.Header.SetField(tagSendingTime, FIXUTCTimestamp{Value: time.Now()})
+	builder.Trailer.SetField(tagCheckSum, FIXString("000"))
 
-	builder.Body.Set(fix.NewStringField(tag.ClOrdID, "A"))
-	builder.Body.Set(fix.NewStringField(tag.HandlInst, "A"))
-	builder.Body.Set(fix.NewStringField(tag.Symbol, "A"))
-	builder.Body.Set(fix.NewStringField(tag.Side, "A"))
-	builder.Body.Set(fix.NewStringField(tag.OrderQty, "A"))
+	builder.Body.SetField(Tag(11), FIXString("A"))
+	builder.Body.SetField(Tag(21), FIXString("A"))
+	builder.Body.SetField(Tag(55), FIXString("A"))
+	builder.Body.SetField(Tag(54), FIXString("A"))
+	builder.Body.SetField(Tag(38), FIXString("A"))
 
 	//ord type is required
-	//builder.Body.Set(fix.NewStringField(tag.OrdType, "A"))
+	//builder.Body.SetField(Tag(40), "A"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonRequiredTagMissing)
-	c.Check(*reject.RefTagID(), Equals, tag.OrdType)
+	c.Check(*reject.RefTagID(), Equals, Tag(40))
 
 	builder = NewMessage()
-	builder.Trailer.Set(fix.NewStringField(tag.CheckSum, "000"))
-	builder.Body.Set(fix.NewStringField(tag.ClOrdID, "A"))
-	builder.Body.Set(fix.NewStringField(tag.HandlInst, "A"))
-	builder.Body.Set(fix.NewStringField(tag.Symbol, "A"))
-	builder.Body.Set(fix.NewStringField(tag.Side, "A"))
-	builder.Body.Set(fix.NewStringField(tag.OrderQty, "A"))
+	builder.Trailer.SetField(tagCheckSum, FIXString("000"))
+	builder.Body.SetField(Tag(11), FIXString("A"))
+	builder.Body.SetField(Tag(21), FIXString("A"))
+	builder.Body.SetField(Tag(55), FIXString("A"))
+	builder.Body.SetField(Tag(54), FIXString("A"))
+	builder.Body.SetField(Tag(38), FIXString("A"))
 
-	builder.Header.Set(fix.NewStringField(tag.MsgType, "D"))
-	builder.Header.Set(fix.NewStringField(tag.BeginString, "FIX.4.0"))
-	builder.Header.Set(fix.NewStringField(tag.BodyLength, "0"))
-	builder.Header.Set(fix.NewStringField(tag.SenderCompID, "0"))
-	builder.Header.Set(fix.NewStringField(tag.TargetCompID, "0"))
-	builder.Header.Set(fix.NewStringField(tag.MsgSeqNum, "0"))
+	builder.Header.SetField(tagMsgType, FIXString("D"))
+	builder.Header.SetField(tagBeginString, FIXString("FIX.4.0"))
+	builder.Header.SetField(tagBodyLength, FIXString("0"))
+	builder.Header.SetField(tagSenderCompID, FIXString("0"))
+	builder.Header.SetField(tagTargetCompID, FIXString("0"))
+	builder.Header.SetField(tagMsgSeqNum, FIXString("0"))
 	//sending time is required
-	//msg.Header.FieldMap.Set(fix.NewStringField(tag.SendingTime, "0"))
+	//msg.Header.FieldMap.SetField(tag.SendingTime, "0"))
 
 	msgBytes, _ = builder.Build()
 	msg, _ = parseMessage(msgBytes)
@@ -167,27 +165,27 @@ func (s *ValidationTests) TestValidateFieldNotFound(c *C) {
 	reject = validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonRequiredTagMissing)
-	c.Check(*reject.RefTagID(), Equals, tag.SendingTime)
+	c.Check(*reject.RefTagID(), Equals, tagSendingTime)
 }
 
 func (s *ValidationTests) TestValidateTagSpecifiedWithoutAValue(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 	builder := s.createFIX40NewOrderSingle()
-	builder.Body.Set(fix.NewStringField(tag.ClientID, ""))
+	builder.Body.SetField(Tag(109), FIXString(""))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonTagSpecifiedWithoutAValue)
-	c.Check(*reject.RefTagID(), Equals, tag.ClientID)
+	c.Check(*reject.RefTagID(), Equals, Tag(109))
 }
 
 func (s *ValidationTests) TestValidateInvalidMsgType(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 
 	builder := s.createFIX40NewOrderSingle()
-	builder.Header.Set(fix.NewStringField(tag.MsgType, "z"))
+	builder.Header.SetField(tagMsgType, FIXString("z"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
@@ -199,41 +197,41 @@ func (s *ValidationTests) TestValidateInvalidMsgType(c *C) {
 func (s *ValidationTests) TestValidateValueIsIncorrect(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 	builder := s.createFIX40NewOrderSingle()
-	builder.Body.Set(fix.NewStringField(tag.HandlInst, "4"))
+	builder.Body.SetField(Tag(21), FIXString("4"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonValueIsIncorrect)
-	c.Check(*reject.RefTagID(), Equals, tag.HandlInst)
+	c.Check(*reject.RefTagID(), Equals, Tag(21))
 }
 
 func (s *ValidationTests) TestValidateIncorrectDataFormatForValue(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 	builder := s.createFIX40NewOrderSingle()
-	builder.Body.Set(fix.NewStringField(tag.OrderQty, "+200.00"))
+	builder.Body.SetField(Tag(38), FIXString("+200.00"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonIncorrectDataFormatForValue)
-	c.Check(*reject.RefTagID(), Equals, tag.OrderQty)
+	c.Check(*reject.RefTagID(), Equals, Tag(38))
 }
 
 func (s *ValidationTests) TestValidateTagSpecifiedOutOfRequiredOrder(c *C) {
 	dict, _ := datadictionary.Parse("spec/FIX40.xml")
 	builder := s.createFIX40NewOrderSingle()
 	//should be in header
-	builder.Body.Set(fix.NewStringField(tag.OnBehalfOfCompID, "CWB"))
+	builder.Body.SetField(tagOnBehalfOfCompID, FIXString("CWB"))
 	msgBytes, _ := builder.Build()
 	msg, _ := parseMessage(msgBytes)
 
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonTagSpecifiedOutOfRequiredOrder)
-	c.Check(*reject.RefTagID(), Equals, tag.OnBehalfOfCompID)
+	c.Check(*reject.RefTagID(), Equals, tagOnBehalfOfCompID)
 }
 
 func (s *ValidationTests) TestValidateTagAppearsMoreThanOnce(c *C) {
@@ -245,7 +243,7 @@ func (s *ValidationTests) TestValidateTagAppearsMoreThanOnce(c *C) {
 	reject := validate(dict, msg)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonTagAppearsMoreThanOnce)
-	c.Check(*reject.RefTagID(), Equals, tag.OrdType)
+	c.Check(*reject.RefTagID(), Equals, Tag(40))
 }
 
 func (s *ValidationTests) TestFloatValidation(c *C) {
@@ -259,76 +257,81 @@ func (s *ValidationTests) TestFloatValidation(c *C) {
 }
 
 func (s *ValidationTests) TestValidateVisitField(c *C) {
-	fieldType := &datadictionary.FieldType{Name: "myfield", Tag: tag.ClOrdID, Type: "STRING"}
+	fieldType := &datadictionary.FieldType{Name: "myfield", Tag: 11, Type: "STRING"}
 	fieldDef := &datadictionary.FieldDef{FieldType: fieldType}
 
-	fields := []fieldBytes{*newFieldBytes(tag.ClOrdID, []byte("value"))}
-	remFields, reject := validateVisitField(fieldDef, fields)
+	TagValues := make([]TagValue, 1)
+	TagValues[0].init(Tag(11), []byte("value"))
+	remFields, reject := validateVisitField(fieldDef, TagValues)
 	c.Check(len(remFields), Equals, 0)
 	c.Check(reject, IsNil)
 }
 
 func (s *ValidationTests) TestValidateVisitFieldGroup(c *C) {
-	fieldType1 := &datadictionary.FieldType{Name: "myfield", Tag: fix.Tag(2), Type: "STRING"}
+	fieldType1 := &datadictionary.FieldType{Name: "myfield", Tag: 2, Type: "STRING"}
 	fieldDef1 := &datadictionary.FieldDef{FieldType: fieldType1, ChildFields: []*datadictionary.FieldDef{}}
 
-	fieldType2 := &datadictionary.FieldType{Name: "myfield", Tag: fix.Tag(3), Type: "STRING"}
+	fieldType2 := &datadictionary.FieldType{Name: "myfield", Tag: 3, Type: "STRING"}
 	fieldDef2 := &datadictionary.FieldDef{FieldType: fieldType2, ChildFields: []*datadictionary.FieldDef{}}
 
-	groupFieldType := &datadictionary.FieldType{Name: "mygroupfield", Tag: fix.Tag(1), Type: "INT"}
+	groupFieldType := &datadictionary.FieldType{Name: "mygroupfield", Tag: 1, Type: "INT"}
 	groupFieldDef := &datadictionary.FieldDef{FieldType: groupFieldType, ChildFields: []*datadictionary.FieldDef{fieldDef1, fieldDef2}}
 
-	repField1 := newFieldBytes(fix.Tag(2), []byte("a"))
-	repField2 := newFieldBytes(fix.Tag(3), []byte("a"))
+	var repField1 TagValue
+	var repField2 TagValue
+	repField1.init(Tag(2), []byte("a"))
+	repField2.init(Tag(3), []byte("a"))
 
 	//non-repeating
-	groupID := newFieldBytes(fix.Tag(1), []byte("1"))
-	fields := []fieldBytes{*groupID, *repField1}
+	var groupID TagValue
+	groupID.init(Tag(1), []byte("1"))
+	fields := []TagValue{groupID, repField1}
 	remFields, reject := validateVisitGroupField(groupFieldDef, fields)
 	c.Check(len(remFields), Equals, 0)
 	c.Check(reject, IsNil)
 
-	fields = []fieldBytes{*groupID, *repField1, *repField2}
+	fields = []TagValue{groupID, repField1, repField2}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(len(remFields), Equals, 0)
 	c.Check(reject, IsNil)
 
 	//test with trailing tag not in group
-	otherField := newFieldBytes(fix.Tag(500), []byte("blah"))
-	fields = []fieldBytes{*groupID, *repField1, *repField2, *otherField}
+	var otherField TagValue
+	otherField.init(Tag(500), []byte("blah"))
+	fields = []TagValue{groupID, repField1, repField2, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(len(remFields), Equals, 1)
 	c.Check(reject, IsNil)
 
 	//repeats
-	groupID = newFieldBytes(fix.Tag(1), []byte("2"))
-	fields = []fieldBytes{*groupID, *repField1, *repField2, *repField1, *repField2, *otherField}
+	groupID.init(Tag(1), []byte("2"))
+	fields = []TagValue{groupID, repField1, repField2, repField1, repField2, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(len(remFields), Equals, 1)
 	c.Check(reject, IsNil)
 
-	groupID = newFieldBytes(fix.Tag(1), []byte("3"))
-	fields = []fieldBytes{*groupID, *repField1, *repField2, *repField1, *repField2, *repField1, *repField2, *otherField}
+	groupID.init(Tag(1), []byte("3"))
+	fields = []TagValue{groupID, repField1, repField2, repField1, repField2, repField1, repField2, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(len(remFields), Equals, 1)
 	c.Check(reject, IsNil)
 
 	//REJECT: group size declared > actual group size
-	groupID = newFieldBytes(fix.Tag(1), []byte("3"))
-	fields = []fieldBytes{*groupID, *repField1, *repField2, *repField1, *repField2, *otherField}
+	groupID.init(Tag(1), []byte("3"))
+	fields = []TagValue{groupID, repField1, repField2, repField1, repField2, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonIncorrectNumInGroupCountForRepeatingGroup)
 
-	groupID = newFieldBytes(fix.Tag(1), []byte("3"))
-	fields = []fieldBytes{*groupID, *repField1, *repField1, *otherField}
+	groupID.init(Tag(1), []byte("3"))
+	fields = []TagValue{groupID, repField1, repField1, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonIncorrectNumInGroupCountForRepeatingGroup)
 
 	//REJECT: group size declared < actual group size
-	groupID = newFieldBytes(fix.Tag(1), []byte("1"))
-	fields = []fieldBytes{*groupID, *repField1, *repField2, *repField1, *repField2, *otherField}
+	groupID.init(Tag(1), []byte("1"))
+	fields = []TagValue{groupID, repField1, repField2, repField1, repField2, otherField}
 	remFields, reject = validateVisitGroupField(groupFieldDef, fields)
 	c.Check(reject, NotNil)
 	c.Check(reject.RejectReason(), Equals, rejectReasonIncorrectNumInGroupCountForRepeatingGroup)
